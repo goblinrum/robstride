@@ -3,6 +3,7 @@ import enum
 import math
 import struct
 from typing import List
+from firmware.bionic_motors.commands import push_bits
 
 import can
 
@@ -92,6 +93,22 @@ class Client:
         id_data_1 = self.host_can_id | (new_motor_id << 8)
         self.bus.send(self._rs_msg(MotorMsg.SetID, id_data_1, motor_id, [0, 0, 0, 0, 0, 0, 0, 0]))
         self._recv()
+        
+    def zero_pos(self, motor_id: int, motor_model=1) -> FeedbackResp:
+        self.bus.send(self._rs_msg(MotorMsg.ZeroPos, self.host_can_id, motor_id, [1, 0, 0, 0, 0, 0, 0, 0])) # TODO: test this function
+        resp = self._recv()
+        return self._parse_feedback_resp(resp, motor_id, motor_model)
+    
+    def use_control_mode(self, motor_id: int, torque: float, velocity: float, position: float, kp: float, kd: float):
+        data = self._convert_to_bytes(position, velocity, kp, kd)
+        torque = max(min(torque, 120.0), -120.0)
+        moment_bytes = int(((torque + 120.0) / 240.0) * 65535)
+        self.bus.send(self._rs_msg(MotorMsg.Control, moment_bytes, motor_id, data))
+    
+    def get_motor_info(self, motor_id: int):
+        self.bus.send(self._rs_msg(MotorMsg.Info, self.host_can_id, motor_id, [0, 0, 0, 0, 0, 0, 0, 0]))
+        resp = self._recv()
+        return resp.data
 
     def read_param(self, motor_id: int, param_id: int | str) -> float | RunMode:
         param_id = self._normalize_param_id(param_id)
@@ -206,3 +223,24 @@ class Client:
             return param_ids_by_name[param_id]
         
         return param_id
+    
+    def _convert_to_bytes(self, angle, angular_velocity, kp, kd):
+        # Ensure values are within their respective ranges
+        angle = max(min(angle, 4 * 3.14159), -4 * 3.14159)
+        angular_velocity = max(min(angular_velocity, 15.0), -15.0)
+        kp = max(min(kp, 5000.0), 0.0)
+        kd = max(min(kd, 100.0), 0.0)
+
+        # Convert each parameter to the corresponding byte values in big-endian order
+        angle_bytes = int(((angle + 4 * 3.14159) / (8 * 3.14159)) * 65535)
+        angular_velocity_bytes = int(((angular_velocity + 15.0) / 30.0) * 65535)
+        kp_bytes = int((kp / 5000.0) * 65535)
+        kd_bytes = int((kd / 100.0) * 65535)
+        
+        command = 0
+        command = push_bits(command, angle_bytes, 16)
+        command = push_bits(command, angular_velocity_bytes, 16)
+        command = push_bits(command, kp_bytes, 16)
+        command = push_bits(command, kd_bytes, 16)
+        
+        return command.to_bytes(8, byteorder='little')

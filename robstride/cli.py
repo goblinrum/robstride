@@ -22,6 +22,17 @@ def main():
     parser_update_id.add_argument('motor_id', type=int, help='The ID of the motor to update')
     parser_update_id.add_argument('new_motor_id', type=int, help='The new ID of the motor')
 
+    parser_zero_pos = subparsers.add_parser('zero_pos')
+    parser_zero_pos.add_argument('motor_id', type=int, help='The ID of the motor to zero')
+    
+    parser_use_control_mode = subparsers.add_parser('use_control_mode')
+    parser_use_control_mode.add_argument('motor_id', type=int)
+    parser_use_control_mode.add_argument('torque', type=float)
+    parser_use_control_mode.add_argument('velocity', type=float)
+    parser_use_control_mode.add_argument('position', type=float)
+    parser_use_control_mode.add_argument('kp', type=float)
+    parser_use_control_mode.add_argument('kd', type=float)
+    
     parser_read = subparsers.add_parser('read')
     parser_read.add_argument('motor_id', type=int)
     parser_read.add_argument('param_name', type=str)
@@ -47,6 +58,10 @@ def run(args):
             client.disable(args.motor_id)
         elif args.command == 'update_id':
             client.update_id(args.motor_id, args.new_motor_id)
+        elif args.command == 'zero_pos':
+            client.zero_pos(args.motor_id)
+        elif args.command == 'use_control_mode':
+            client.use_control_mode(args.motor_id, args.torque, args.velocity, args.position, args.kp, args.kd)
         elif args.command == 'read':
             param_id = param_ids_by_name[args.param_name]
             value = client.read_param(args.motor_id, param_id)
